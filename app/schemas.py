@@ -55,7 +55,7 @@ class RoleElevationRequest(BaseModel):
 
 class SupplierCreateRequest(BaseModel):
     name: str
-    country: str | None = None
+    country: str | None = Field(default=None, min_length=2, max_length=2)
     category: str | None = None
     delivery_reliability_score: float | None = Field(default=None, ge=0, le=100)
     defect_rate: float | None = Field(default=None, ge=0, le=100)
@@ -66,7 +66,7 @@ class SupplierCreateRequest(BaseModel):
 class SupplierUpdateRequest(BaseModel):
     name: str | None = None
     status: SupplierStatus | None = None
-    country: str | None = None
+    country: str | None = Field(default=None, min_length=2, max_length=2)
     category: str | None = None
     delivery_reliability_score: float | None = Field(default=None, ge=0, le=100)
     defect_rate: float | None = Field(default=None, ge=0, le=100)
