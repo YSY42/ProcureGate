@@ -267,8 +267,9 @@ def _require_step_authority(caller: User, po: PurchaseOrder, step: ApprovalStep)
     mechanism literally."""
     if caller.role != step.required_role:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not permitted")
-    if step.required_role == Role.department_approver and caller.team != po.requester.team:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not permitted")
+    if step.required_role == Role.department_approver:
+        if caller.team is None or po.requester.team is None or caller.team != po.requester.team:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not permitted")
 
 
 def _do_approve_or_reject(db: Session, po: PurchaseOrder, caller: User, action: str) -> None:
