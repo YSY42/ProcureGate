@@ -2,12 +2,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.audit import write_audit_entry
-from app.auth import require_roles
+from app.auth import get_current_user, require_roles
 from app.database import get_db
 from app.models import AuditActionType, Role, User
 from app.schemas import RoleElevationRequest, UserResponse
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
+
+
+@router.get("/me", response_model=UserResponse)
+def get_me(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    return current_user
 
 
 @router.patch("/{user_id}/role", response_model=UserResponse)
