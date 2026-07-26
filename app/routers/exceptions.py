@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.audit import write_audit_entry
 from app.auth import require_roles
 from app.database import get_db
+from app.exception_metrics import count_recent_approved_exceptions
 from app.models import (
     ApprovalControlStatus,
     AuditActionType,
@@ -68,6 +69,10 @@ def create_exception_request(
 
     db.commit()
     db.refresh(exception_request)
+
+    exception_request.recent_exception_count_for_supplier = count_recent_approved_exceptions(
+        db, po.supplier_id
+    )
     return exception_request
 
 

@@ -172,6 +172,7 @@ class ExceptionRequestResponse(BaseModel):
     status: ExceptionStatus
     decided_by_id: int | None
     decided_at: datetime | None
+    recent_exception_count_for_supplier: int | None = None
 
 
 # ---------------------------------------------------------------------------
