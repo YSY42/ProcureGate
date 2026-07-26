@@ -6,6 +6,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.auth import require_roles
 from app.database import get_db
+from app.exception_metrics import (
+    exception_trigger_reason_breakdown,
+    top_requesters_by_recent_exceptions,
+    top_suppliers_by_recent_exceptions,
+)
 from app.models import (
     AuditActionType,
     AuditLogEntry,
@@ -25,9 +30,12 @@ from app.schemas import (
     ApproverDashboard,
     AuditLogEntryResponse,
     ExceptionCounts,
+    ExceptionDriftSignals,
     ProcurementLeadDashboard,
     RequesterDashboard,
+    RequesterExceptionSignal,
     RoleElevationLogEntry,
+    SupplierExceptionSignal,
 )
 
 router = APIRouter(prefix="/api/v1", tags=["dashboard"])
@@ -157,6 +165,17 @@ def _procurement_lead_dashboard(db: Session) -> ProcurementLeadDashboard:
         .all()
     )
 
+    drift_window_days = 90
+    top_suppliers = [
+        SupplierExceptionSignal(supplier_id=sid, supplier_name=name, count=count)
+        for sid, name, count in top_suppliers_by_recent_exceptions(db, days=drift_window_days)
+    ]
+    top_requesters = [
+        RequesterExceptionSignal(requester_id=uid, requester_email=email, count=count)
+        for uid, email, count in top_requesters_by_recent_exceptions(db, days=drift_window_days)
+    ]
+    trigger_breakdown = exception_trigger_reason_breakdown(db, days=drift_window_days)
+
     return ProcurementLeadDashboard(
         blocked_creation_attempts=blocked_creation_attempts,
         exception_requests=exception_counts,
@@ -164,6 +183,12 @@ def _procurement_lead_dashboard(db: Session) -> ProcurementLeadDashboard:
         risk_tier_distribution=risk_tier_distribution,
         avg_approval_time_by_tier=avg_approval_time_by_tier,
         pending_approval_aging=_aging_stats(pending, now),
+        exception_drift_signals=ExceptionDriftSignals(
+            window_days=drift_window_days,
+            top_suppliers=top_suppliers,
+            top_requesters=top_requesters,
+            trigger_reason_distribution=trigger_breakdown,
+        ),
     )
 
 

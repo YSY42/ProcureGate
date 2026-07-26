@@ -202,6 +202,25 @@ class ExceptionCounts(BaseModel):
     lapsed: int
 
 
+class SupplierExceptionSignal(BaseModel):
+    supplier_id: int
+    supplier_name: str
+    count: int
+
+
+class RequesterExceptionSignal(BaseModel):
+    requester_id: int
+    requester_email: str
+    count: int
+
+
+class ExceptionDriftSignals(BaseModel):
+    window_days: int
+    top_suppliers: list[SupplierExceptionSignal]
+    top_requesters: list[RequesterExceptionSignal]
+    trigger_reason_distribution: dict[str, int]
+
+
 class ProcurementLeadDashboard(BaseModel):
     blocked_creation_attempts: int
     exception_requests: ExceptionCounts
@@ -209,6 +228,7 @@ class ProcurementLeadDashboard(BaseModel):
     risk_tier_distribution: dict[str, int]
     avg_approval_time_by_tier: dict[str, float | None]
     pending_approval_aging: AgingStats
+    exception_drift_signals: ExceptionDriftSignals
 
 
 class RoleElevationLogEntry(BaseModel):
