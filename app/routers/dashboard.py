@@ -8,6 +8,8 @@ from app.auth import require_roles
 from app.database import get_db
 from app.exception_metrics import (
     exception_trigger_reason_breakdown,
+    po_control_status_breakdown,
+    po_trigger_reason_breakdown,
     top_requesters_by_recent_exceptions,
     top_suppliers_by_recent_exceptions,
 )
@@ -61,7 +63,12 @@ def _requester_dashboard(db: Session, caller: User) -> RequesterDashboard:
         .filter(PurchaseOrder.requester_id == caller.id)
         .all()
     )
-    return RequesterDashboard(my_purchase_orders=pos)
+    po_ids = [po.id for po in pos]
+    return RequesterDashboard(
+        my_purchase_orders=pos,
+        my_control_status_breakdown=po_control_status_breakdown(db, po_ids),
+        my_trigger_reason_breakdown=po_trigger_reason_breakdown(db, po_ids),
+    )
 
 
 def _approver_dashboard(db: Session, caller: User) -> ApproverDashboard:
@@ -85,10 +92,20 @@ def _approver_dashboard(db: Session, caller: User) -> ApproverDashboard:
             for s in po.approval_steps
         )
     ]
+    team_po_ids = [
+        row.id
+        for row in db.query(PurchaseOrder.id)
+        .join(User, PurchaseOrder.requester_id == User.id)
+        .filter(User.team == caller.team)
+        .all()
+    ]
+
     return ApproverDashboard(
         team=caller.team,
         pending_approvals=pending,
         pending_approval_aging=_aging_stats(pending, now),
+        team_control_status_breakdown=po_control_status_breakdown(db, team_po_ids),
+        team_trigger_reason_breakdown=po_trigger_reason_breakdown(db, team_po_ids),
     )
 
 

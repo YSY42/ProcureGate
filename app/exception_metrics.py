@@ -124,3 +124,48 @@ def top_requesters_by_recent_exceptions(
         .all()
     )
     return [(uid, email, count) for uid, email, count in rows]
+
+
+def po_control_status_breakdown(db: Session, purchase_order_ids: list[int]) -> dict[str, int]:
+    """Personal/team-scoped version of the same idea behind risk_tier_distribution
+    on the procurement_lead dashboard — but scoped to a specific set of POs
+    (one requester's own orders, or one team's orders) rather than the whole
+    system. Reuses the same grouping shape so a requester or approver reads
+    the same visual language as the org-wide dashboard, just narrower."""
+    if not purchase_order_ids:
+        return {}
+    rows = (
+        db.query(PurchaseOrder.approval_control_status, func.count(PurchaseOrder.id))
+        .filter(
+            PurchaseOrder.id.in_(purchase_order_ids),
+            PurchaseOrder.approval_control_status.isnot(None),
+        )
+        .group_by(PurchaseOrder.approval_control_status)
+        .all()
+    )
+    return {status.value: count for status, count in rows}
+
+
+def po_trigger_reason_breakdown(db: Session, purchase_order_ids: list[int]) -> dict[str, int]:
+    """Same shape as exception_trigger_reason_breakdown, but scoped to a
+    specific requester's or team's own POs directly (not just the ones that
+    went through an approved exception) — answers "what do I personally keep
+    hitting", not just "what gets exempted"."""
+    if not purchase_order_ids:
+        return {}
+    trigger_types = [
+        AuditActionType.risk_trigger_compliance_floor,
+        AuditActionType.risk_trigger_stale,
+        AuditActionType.risk_trigger_incomplete_or_unassessed,
+    ]
+    rows = (
+        db.query(AuditLogEntry.action_type, func.count(AuditLogEntry.id))
+        .filter(
+            AuditLogEntry.entity_type == "purchase_order",
+            AuditLogEntry.entity_id.in_(purchase_order_ids),
+            AuditLogEntry.action_type.in_(trigger_types),
+        )
+        .group_by(AuditLogEntry.action_type)
+        .all()
+    )
+    return {action_type.value: count for action_type, count in rows}

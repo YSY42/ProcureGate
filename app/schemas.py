@@ -187,12 +187,16 @@ class AgingStats(BaseModel):
 
 class RequesterDashboard(BaseModel):
     my_purchase_orders: list[PurchaseOrderResponse]
+    my_control_status_breakdown: dict[str, int]
+    my_trigger_reason_breakdown: dict[str, int]
 
 
 class ApproverDashboard(BaseModel):
     team: str | None
     pending_approvals: list[PurchaseOrderResponse]
     pending_approval_aging: AgingStats
+    team_control_status_breakdown: dict[str, int]
+    team_trigger_reason_breakdown: dict[str, int]
 
 
 class ExceptionCounts(BaseModel):
