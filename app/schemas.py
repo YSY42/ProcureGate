@@ -197,6 +197,7 @@ class ApproverDashboard(BaseModel):
     pending_approval_aging: AgingStats
     team_control_status_breakdown: dict[str, int]
     team_trigger_reason_breakdown: dict[str, int]
+    team_purchase_orders: list[PurchaseOrderResponse]
 
 
 class ExceptionCounts(BaseModel):
@@ -218,15 +219,38 @@ class RequesterExceptionSignal(BaseModel):
     count: int
 
 
+class TriggerReasonDetailResponse(BaseModel):
+    po_id: int
+    action_type: str
+    rationale: str
+    at: datetime
+
+
+class ExceptionDetailResponse(BaseModel):
+    po_id: int
+    justification: str
+    decided_at: datetime | None
+
+
 class ExceptionDriftSignals(BaseModel):
     window_days: int
     top_suppliers: list[SupplierExceptionSignal]
     top_requesters: list[RequesterExceptionSignal]
     trigger_reason_distribution: dict[str, int]
+    trigger_reason_details: list[TriggerReasonDetailResponse]
+
+
+class BlockedAttemptDetail(BaseModel):
+    supplier_id: int
+    supplier_name: str
+    actor_email: str
+    rationale: str
+    at: datetime
 
 
 class ProcurementLeadDashboard(BaseModel):
     blocked_creation_attempts: int
+    blocked_creation_attempt_details: list[BlockedAttemptDetail]
     exception_requests: ExceptionCounts
     pos_affected_by_stale_or_unassessed: int
     risk_tier_distribution: dict[str, int]

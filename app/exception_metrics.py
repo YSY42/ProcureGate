@@ -66,6 +66,103 @@ def top_suppliers_by_recent_exceptions(
     return [(supplier_id, name, count) for supplier_id, name, count in rows]
 
 
+class TriggerReasonDetail:
+    """Lightweight internal carrier, converted to schema at the router layer."""
+
+    def __init__(self, po_id: int, action_type: str, rationale: str, at: datetime):
+        self.po_id = po_id
+        self.action_type = action_type
+        self.rationale = rationale
+        self.at = at
+
+
+def exception_trigger_reason_details(db: Session, days: int = 90) -> list[TriggerReasonDetail]:
+    """Same underlying query as exception_trigger_reason_breakdown, but
+    returns the individual entries rather than just counts — so the
+    dashboard can show "which POs" behind each reason, not just a number."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    po_ids = [
+        row.purchase_order_id
+        for row in db.query(ExceptionRequest.purchase_order_id)
+        .filter(
+            ExceptionRequest.status == ExceptionStatus.approved,
+            ExceptionRequest.decided_at >= cutoff,
+        )
+        .all()
+    ]
+    if not po_ids:
+        return []
+
+    trigger_types = [
+        AuditActionType.risk_trigger_compliance_floor,
+        AuditActionType.risk_trigger_stale,
+        AuditActionType.risk_trigger_incomplete_or_unassessed,
+    ]
+    rows = (
+        db.query(AuditLogEntry)
+        .filter(
+            AuditLogEntry.entity_type == "purchase_order",
+            AuditLogEntry.entity_id.in_(po_ids),
+            AuditLogEntry.action_type.in_(trigger_types),
+        )
+        .order_by(AuditLogEntry.created_at.desc())
+        .all()
+    )
+    return [
+        TriggerReasonDetail(row.entity_id, row.action_type.value, row.rationale, row.created_at)
+        for row in rows
+    ]
+
+
+def supplier_exception_detail_list(db: Session, supplier_id: int, days: int = 90) -> list[dict]:
+    """Individual approved exception requests for one supplier — backs the
+    drill-down when a procurement_lead clicks a supplier in the drift
+    signal list."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = (
+        db.query(ExceptionRequest)
+        .join(PurchaseOrder, ExceptionRequest.purchase_order_id == PurchaseOrder.id)
+        .filter(
+            PurchaseOrder.supplier_id == supplier_id,
+            ExceptionRequest.status == ExceptionStatus.approved,
+            ExceptionRequest.decided_at >= cutoff,
+        )
+        .order_by(ExceptionRequest.decided_at.desc())
+        .all()
+    )
+    return [
+        {
+            "po_id": r.purchase_order_id,
+            "justification": r.justification,
+            "decided_at": r.decided_at,
+        }
+        for r in rows
+    ]
+
+
+def requester_exception_detail_list(db: Session, requester_id: int, days: int = 90) -> list[dict]:
+    """Same shape, scoped to one requester instead of one supplier."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = (
+        db.query(ExceptionRequest)
+        .filter(
+            ExceptionRequest.requested_by_id == requester_id,
+            ExceptionRequest.status == ExceptionStatus.approved,
+            ExceptionRequest.decided_at >= cutoff,
+        )
+        .order_by(ExceptionRequest.decided_at.desc())
+        .all()
+    )
+    return [
+        {
+            "po_id": r.purchase_order_id,
+            "justification": r.justification,
+            "decided_at": r.decided_at,
+        }
+        for r in rows
+    ]
+
+
 def exception_trigger_reason_breakdown(db: Session, days: int = 90) -> dict[str, int]:
     """Signal #2: for exceptions approved within the window, look up which
     risk-trigger reason originally blocked the underlying PO, and count by

@@ -8,8 +8,11 @@ from app.auth import require_roles
 from app.database import get_db
 from app.exception_metrics import (
     exception_trigger_reason_breakdown,
+    exception_trigger_reason_details,
     po_control_status_breakdown,
     po_trigger_reason_breakdown,
+    requester_exception_detail_list,
+    supplier_exception_detail_list,
     top_requesters_by_recent_exceptions,
     top_suppliers_by_recent_exceptions,
 )
@@ -31,13 +34,16 @@ from app.schemas import (
     AgingStats,
     ApproverDashboard,
     AuditLogEntryResponse,
+    BlockedAttemptDetail,
     ExceptionCounts,
+    ExceptionDetailResponse,
     ExceptionDriftSignals,
     ProcurementLeadDashboard,
     RequesterDashboard,
     RequesterExceptionSignal,
     RoleElevationLogEntry,
     SupplierExceptionSignal,
+    TriggerReasonDetailResponse,
 )
 
 router = APIRouter(prefix="/api/v1", tags=["dashboard"])
@@ -92,13 +98,14 @@ def _approver_dashboard(db: Session, caller: User) -> ApproverDashboard:
             for s in po.approval_steps
         )
     ]
-    team_po_ids = [
-        row.id
-        for row in db.query(PurchaseOrder.id)
+    team_pos = (
+        db.query(PurchaseOrder)
         .join(User, PurchaseOrder.requester_id == User.id)
+        .options(joinedload(PurchaseOrder.approval_steps))
         .filter(User.team == caller.team)
         .all()
-    ]
+    )
+    team_po_ids = [po.id for po in team_pos]
 
     return ApproverDashboard(
         team=caller.team,
@@ -106,17 +113,34 @@ def _approver_dashboard(db: Session, caller: User) -> ApproverDashboard:
         pending_approval_aging=_aging_stats(pending, now),
         team_control_status_breakdown=po_control_status_breakdown(db, team_po_ids),
         team_trigger_reason_breakdown=po_trigger_reason_breakdown(db, team_po_ids),
+        team_purchase_orders=team_pos,
     )
 
 
 def _procurement_lead_dashboard(db: Session) -> ProcurementLeadDashboard:
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
-    blocked_creation_attempts = (
+    blocked_attempt_entries = (
         db.query(AuditLogEntry)
         .filter(AuditLogEntry.action_type == AuditActionType.po_creation_blocked)
-        .count()
+        .order_by(AuditLogEntry.created_at.desc())
+        .all()
     )
+    blocked_creation_attempts = len(blocked_attempt_entries)
+
+    blocked_creation_attempt_details = []
+    for entry in blocked_attempt_entries:
+        supplier = db.get(Supplier, entry.entity_id)
+        actor = db.get(User, entry.actor_id) if entry.actor_id else None
+        blocked_creation_attempt_details.append(
+            BlockedAttemptDetail(
+                supplier_id=entry.entity_id,
+                supplier_name=supplier.name if supplier else "Unknown",
+                actor_email=actor.email if actor else "Unknown",
+                rationale=entry.rationale,
+                at=entry.created_at,
+            )
+        )
 
     exception_counts = ExceptionCounts(
         submitted=db.query(ExceptionRequest).count(),
@@ -192,9 +216,17 @@ def _procurement_lead_dashboard(db: Session) -> ProcurementLeadDashboard:
         for uid, email, count in top_requesters_by_recent_exceptions(db, days=drift_window_days)
     ]
     trigger_breakdown = exception_trigger_reason_breakdown(db, days=drift_window_days)
+    trigger_details_raw = exception_trigger_reason_details(db, days=drift_window_days)
+    trigger_details = [
+        TriggerReasonDetailResponse(
+            po_id=d.po_id, action_type=d.action_type, rationale=d.rationale, at=d.at
+        )
+        for d in trigger_details_raw
+    ]
 
     return ProcurementLeadDashboard(
         blocked_creation_attempts=blocked_creation_attempts,
+        blocked_creation_attempt_details=blocked_creation_attempt_details,
         exception_requests=exception_counts,
         pos_affected_by_stale_or_unassessed=len(affected_po_ids),
         risk_tier_distribution=risk_tier_distribution,
@@ -205,6 +237,7 @@ def _procurement_lead_dashboard(db: Session) -> ProcurementLeadDashboard:
             top_suppliers=top_suppliers,
             top_requesters=top_requesters,
             trigger_reason_distribution=trigger_breakdown,
+            trigger_reason_details=trigger_details,
         ),
     )
 
@@ -251,6 +284,30 @@ def get_dashboard(
     # procurement_lead and auditor see the same aggregate business view
     # (spec.md US5 AC8) — auditor's read access is otherwise identical.
     return _procurement_lead_dashboard(db)
+
+
+@router.get(
+    "/dashboard/supplier-exceptions/{supplier_id}",
+    response_model=list[ExceptionDetailResponse],
+)
+def get_supplier_exception_details(
+    supplier_id: int,
+    db: Session = Depends(get_db),
+    caller: User = Depends(require_roles(Role.procurement_lead, Role.auditor)),
+) -> list[dict]:
+    return supplier_exception_detail_list(db, supplier_id)
+
+
+@router.get(
+    "/dashboard/requester-exceptions/{requester_id}",
+    response_model=list[ExceptionDetailResponse],
+)
+def get_requester_exception_details(
+    requester_id: int,
+    db: Session = Depends(get_db),
+    caller: User = Depends(require_roles(Role.procurement_lead, Role.auditor)),
+) -> list[dict]:
+    return requester_exception_detail_list(db, requester_id)
 
 
 @router.get("/audit-log", response_model=list[AuditLogEntryResponse])
