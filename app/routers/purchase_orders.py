@@ -180,6 +180,7 @@ def _do_submit(db: Session, po: PurchaseOrder, caller: User) -> None:
                 f"Blocked: supplier assessment is {validity.value} "
                 f"(missing or never-completed risk data)"
             ),
+            metadata={"validity": validity.value},
         )
     if floor_failed:
         write_audit_entry(
@@ -192,6 +193,10 @@ def _do_submit(db: Session, po: PurchaseOrder, caller: User) -> None:
                 f"Blocked: supplier compliance floor failed "
                 f"(esg_rating={supplier.esg_rating}, sanctions_flag={supplier.sanctions_flag})"
             ),
+            metadata={
+                "esg_rating": supplier.esg_rating,
+                "sanctions_flag": supplier.sanctions_flag,
+            },
         )
     if validity == ValidityStatus.stale:
         age_days = (
@@ -210,6 +215,13 @@ def _do_submit(db: Session, po: PurchaseOrder, caller: User) -> None:
                 f"staleness window {settings.ASSESSMENT_STALENESS_DAYS} days); "
                 f"last computed tier was {supplier.computed_risk_tier}"
             ),
+            metadata={
+                "age_days": age_days,
+                "staleness_window_days": settings.ASSESSMENT_STALENESS_DAYS,
+                "last_computed_tier": (
+                    supplier.computed_risk_tier.value if supplier.computed_risk_tier else None
+                ),
+            },
         )
 
     steps = generate_approval_steps(control_status)
@@ -227,6 +239,11 @@ def _do_submit(db: Session, po: PurchaseOrder, caller: User) -> None:
             f"Submitted; control_status={control_status.value} "
             f"(tier={tier}, validity={validity.value})"
         ),
+        metadata={
+            "control_status": control_status.value,
+            "tier": tier.value if tier else None,
+            "validity": validity.value,
+        },
     )
 
 

@@ -185,10 +185,29 @@ class AgingStats(BaseModel):
     oldest_pending_days: int | None
 
 
+class ApprovalTimeDetailResponse(BaseModel):
+    po_id: int
+    description: str
+    amount: Decimal
+    currency: str
+    supplier_name: str
+    days_to_decision: float
+    decided_at: datetime
+
+
+class TriggerReasonDetailResponse(BaseModel):
+    po_id: int
+    action_type: str
+    rationale: str
+    at: datetime
+    metadata: dict | None = None
+
+
 class RequesterDashboard(BaseModel):
     my_purchase_orders: list[PurchaseOrderResponse]
     my_control_status_breakdown: dict[str, int]
     my_trigger_reason_breakdown: dict[str, int]
+    my_trigger_reason_details: list[TriggerReasonDetailResponse]
 
 
 class ApproverDashboard(BaseModel):
@@ -198,6 +217,7 @@ class ApproverDashboard(BaseModel):
     team_control_status_breakdown: dict[str, int]
     team_trigger_reason_breakdown: dict[str, int]
     team_purchase_orders: list[PurchaseOrderResponse]
+    team_trigger_reason_details: list[TriggerReasonDetailResponse]
 
 
 class ExceptionCounts(BaseModel):
@@ -217,13 +237,6 @@ class RequesterExceptionSignal(BaseModel):
     requester_id: int
     requester_email: str
     count: int
-
-
-class TriggerReasonDetailResponse(BaseModel):
-    po_id: int
-    action_type: str
-    rationale: str
-    at: datetime
 
 
 class ExceptionDetailResponse(BaseModel):
@@ -254,6 +267,7 @@ class ProcurementLeadDashboard(BaseModel):
     exception_requests: ExceptionCounts
     pos_affected_by_stale_or_unassessed: int
     risk_tier_distribution: dict[str, int]
+    risk_tier_amount_distribution: dict[str, float]
     avg_approval_time_by_tier: dict[str, float | None]
     pending_approval_aging: AgingStats
     exception_drift_signals: ExceptionDriftSignals

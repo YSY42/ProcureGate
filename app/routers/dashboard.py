@@ -7,11 +7,14 @@ from sqlalchemy.orm import Session, joinedload
 from app.auth import require_roles
 from app.database import get_db
 from app.exception_metrics import (
+    approval_time_details_by_tier,
     exception_trigger_reason_breakdown,
     exception_trigger_reason_details,
     po_control_status_breakdown,
     po_trigger_reason_breakdown,
+    po_trigger_reason_details,
     requester_exception_detail_list,
+    risk_tier_amount_exposure,
     supplier_exception_detail_list,
     top_requesters_by_recent_exceptions,
     top_suppliers_by_recent_exceptions,
@@ -32,6 +35,7 @@ from app.risk_engine import _as_naive_utc
 from app.schemas import (
     AccessAdminDashboard,
     AgingStats,
+    ApprovalTimeDetailResponse,
     ApproverDashboard,
     AuditLogEntryResponse,
     BlockedAttemptDetail,
@@ -74,6 +78,16 @@ def _requester_dashboard(db: Session, caller: User) -> RequesterDashboard:
         my_purchase_orders=pos,
         my_control_status_breakdown=po_control_status_breakdown(db, po_ids),
         my_trigger_reason_breakdown=po_trigger_reason_breakdown(db, po_ids),
+        my_trigger_reason_details=[
+            TriggerReasonDetailResponse(
+                po_id=d.po_id,
+                action_type=d.action_type,
+                rationale=d.rationale,
+                at=d.at,
+                metadata=d.metadata,
+            )
+            for d in po_trigger_reason_details(db, po_ids)
+        ],
     )
 
 
@@ -114,6 +128,16 @@ def _approver_dashboard(db: Session, caller: User) -> ApproverDashboard:
         team_control_status_breakdown=po_control_status_breakdown(db, team_po_ids),
         team_trigger_reason_breakdown=po_trigger_reason_breakdown(db, team_po_ids),
         team_purchase_orders=team_pos,
+        team_trigger_reason_details=[
+            TriggerReasonDetailResponse(
+                po_id=d.po_id,
+                action_type=d.action_type,
+                rationale=d.rationale,
+                at=d.at,
+                metadata=d.metadata,
+            )
+            for d in po_trigger_reason_details(db, team_po_ids)
+        ],
     )
 
 
@@ -219,7 +243,11 @@ def _procurement_lead_dashboard(db: Session) -> ProcurementLeadDashboard:
     trigger_details_raw = exception_trigger_reason_details(db, days=drift_window_days)
     trigger_details = [
         TriggerReasonDetailResponse(
-            po_id=d.po_id, action_type=d.action_type, rationale=d.rationale, at=d.at
+            po_id=d.po_id,
+            action_type=d.action_type,
+            rationale=d.rationale,
+            at=d.at,
+            metadata=d.metadata,
         )
         for d in trigger_details_raw
     ]
@@ -230,6 +258,7 @@ def _procurement_lead_dashboard(db: Session) -> ProcurementLeadDashboard:
         exception_requests=exception_counts,
         pos_affected_by_stale_or_unassessed=len(affected_po_ids),
         risk_tier_distribution=risk_tier_distribution,
+        risk_tier_amount_distribution=risk_tier_amount_exposure(db),
         avg_approval_time_by_tier=avg_approval_time_by_tier,
         pending_approval_aging=_aging_stats(pending, now),
         exception_drift_signals=ExceptionDriftSignals(
@@ -308,6 +337,18 @@ def get_requester_exception_details(
     caller: User = Depends(require_roles(Role.procurement_lead, Role.auditor)),
 ) -> list[dict]:
     return requester_exception_detail_list(db, requester_id)
+
+
+@router.get(
+    "/dashboard/approval-time-details/{tier}",
+    response_model=list[ApprovalTimeDetailResponse],
+)
+def get_approval_time_details(
+    tier: RiskTier,
+    db: Session = Depends(get_db),
+    caller: User = Depends(require_roles(Role.procurement_lead, Role.auditor)),
+) -> list[dict]:
+    return approval_time_details_by_tier(db, tier)
 
 
 @router.get("/audit-log", response_model=list[AuditLogEntryResponse])

@@ -3,15 +3,19 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import FX_RATES_TO_EUR
 from app.models import (
     AuditActionType,
     AuditLogEntry,
     ExceptionRequest,
     ExceptionStatus,
+    POStatus,
     PurchaseOrder,
+    RiskTier,
     Supplier,
     User,
 )
+from app.risk_engine import _as_naive_utc
 
 
 def count_recent_approved_exceptions(db: Session, supplier_id: int, days: int = 90) -> int:
@@ -69,11 +73,19 @@ def top_suppliers_by_recent_exceptions(
 class TriggerReasonDetail:
     """Lightweight internal carrier, converted to schema at the router layer."""
 
-    def __init__(self, po_id: int, action_type: str, rationale: str, at: datetime):
+    def __init__(
+        self,
+        po_id: int,
+        action_type: str,
+        rationale: str,
+        at: datetime,
+        metadata: dict | None = None,
+    ):
         self.po_id = po_id
         self.action_type = action_type
         self.rationale = rationale
         self.at = at
+        self.metadata = metadata
 
 
 def exception_trigger_reason_details(db: Session, days: int = 90) -> list[TriggerReasonDetail]:
@@ -109,7 +121,9 @@ def exception_trigger_reason_details(db: Session, days: int = 90) -> list[Trigge
         .all()
     )
     return [
-        TriggerReasonDetail(row.entity_id, row.action_type.value, row.rationale, row.created_at)
+        TriggerReasonDetail(
+            row.entity_id, row.action_type.value, row.rationale, row.created_at, row.metadata_json
+        )
         for row in rows
     ]
 
@@ -201,6 +215,38 @@ def exception_trigger_reason_breakdown(db: Session, days: int = 90) -> dict[str,
     return {action_type.value: count for action_type, count in rows}
 
 
+def po_trigger_reason_details(
+    db: Session, purchase_order_ids: list[int]
+) -> list[TriggerReasonDetail]:
+    """Same shape as po_trigger_reason_breakdown, but returns the individual
+    entries rather than just counts — backs the drill-down when a
+    requester/approver clicks a specific trigger reason on their
+    personal/team risk picture (same pattern as exception_trigger_reason_details)."""
+    if not purchase_order_ids:
+        return []
+    trigger_types = [
+        AuditActionType.risk_trigger_compliance_floor,
+        AuditActionType.risk_trigger_stale,
+        AuditActionType.risk_trigger_incomplete_or_unassessed,
+    ]
+    rows = (
+        db.query(AuditLogEntry)
+        .filter(
+            AuditLogEntry.entity_type == "purchase_order",
+            AuditLogEntry.entity_id.in_(purchase_order_ids),
+            AuditLogEntry.action_type.in_(trigger_types),
+        )
+        .order_by(AuditLogEntry.created_at.desc())
+        .all()
+    )
+    return [
+        TriggerReasonDetail(
+            row.entity_id, row.action_type.value, row.rationale, row.created_at, row.metadata_json
+        )
+        for row in rows
+    ]
+
+
 def top_requesters_by_recent_exceptions(
     db: Session, days: int = 90, limit: int = 5
 ) -> list[tuple[int, str, int]]:
@@ -221,6 +267,62 @@ def top_requesters_by_recent_exceptions(
         .all()
     )
     return [(uid, email, count) for uid, email, count in rows]
+
+
+def approval_time_details_by_tier(db: Session, tier: RiskTier) -> list[dict]:
+    """Backs the 'Approval Time by Risk Tier' chart drill-down — same
+    approved/decided PO population used for the aggregate mean in
+    dashboard.py, but returns per-PO records so a procurement_lead can see
+    exactly which orders drove an unexpected average (e.g. why 'high' tier
+    might look faster than 'medium')."""
+    rows = (
+        db.query(PurchaseOrder, Supplier.name)
+        .join(Supplier, Supplier.id == PurchaseOrder.supplier_id)
+        .filter(
+            PurchaseOrder.status == POStatus.approved,
+            PurchaseOrder.decided_at.isnot(None),
+            PurchaseOrder.submitted_at.isnot(None),
+            Supplier.computed_risk_tier == tier,
+        )
+        .all()
+    )
+    results = []
+    for po, supplier_name in rows:
+        days = (
+            _as_naive_utc(po.decided_at) - _as_naive_utc(po.submitted_at)
+        ).total_seconds() / 86400
+        results.append(
+            {
+                "po_id": po.id,
+                "description": po.description,
+                "amount": po.amount,
+                "currency": po.currency,
+                "supplier_name": supplier_name,
+                "days_to_decision": days,
+                "decided_at": po.decided_at,
+            }
+        )
+    return sorted(results, key=lambda r: r["days_to_decision"])
+
+
+def risk_tier_amount_exposure(db: Session) -> dict[str, float]:
+    """Approved-only spend by supplier risk tier, normalized to EUR using a
+    static demo rate table (not live FX). Answers "how much money is
+    actually sitting at each risk tier", not just "how many suppliers"."""
+    rows = (
+        db.query(PurchaseOrder.amount, PurchaseOrder.currency, Supplier.computed_risk_tier)
+        .join(Supplier, Supplier.id == PurchaseOrder.supplier_id)
+        .filter(
+            PurchaseOrder.status == POStatus.approved,
+            Supplier.computed_risk_tier.isnot(None),
+        )
+        .all()
+    )
+    totals: dict[str, float] = {tier.value: 0.0 for tier in RiskTier}
+    for amount, currency, tier in rows:
+        rate = FX_RATES_TO_EUR.get(currency, 1.0)
+        totals[tier.value] += float(amount) * rate
+    return totals
 
 
 def po_control_status_breakdown(db: Session, purchase_order_ids: list[int]) -> dict[str, int]:
