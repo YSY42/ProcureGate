@@ -19,10 +19,12 @@ struct PurchaseOrderListView: View {
     let isLoading: Bool
     @Binding var errorMessage: String?
     var onReload: () async -> Void
+    var onBackToDashboard: () -> Void
 
     @State private var showingCreateSheet = false
     @State private var groupingMode: GroupingMode = .byProgress
     @State private var expandedSections: Set<String> = ["Needs Your Action", "Blocked", "In Progress"]
+    @State private var searchText = ""
 
     private var currentUserRole: String? {
         APIClient.shared.currentUser?.role
@@ -35,30 +37,47 @@ struct PurchaseOrderListView: View {
         currentUserRole == "procurement_lead" || currentUserRole == "department_approver"
     }
 
+    // Segregation of duties: department_approver stays a pure approver (the
+    // independence of that check is the point), and access_admin/auditor
+    // don't touch procurement business data at all. procurement_lead can
+    // create POs directly for centrally-negotiated/strategic sourcing
+    // rather than always routing through a requester.
+    private var canCreatePO: Bool {
+        currentUserRole == "requester" || currentUserRole == "procurement_lead"
+    }
+    
+    private var filteredPurchaseOrders: [PurchaseOrder] {
+        guard !searchText.isEmpty else { return purchaseOrders }
+        return purchaseOrders.filter { po in
+            String(po.id).contains(searchText)
+            || po.description.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
     // MARK: - Grouping by progress
     private var actionRequired: [PurchaseOrder] {
-        purchaseOrders.filter { po in
+        filteredPurchaseOrders.filter { po in
             po.status == "submitted"
                 && po.approvalSteps.contains { $0.status == "pending" && $0.requiredRole == currentUserRole }
         }
     }
     private var blocked: [PurchaseOrder] {
-        purchaseOrders.filter { po in
+        filteredPurchaseOrders.filter { po in
             po.status == "submitted" && po.approvalControlStatus == "blocked"
         }
     }
     private var inProgress: [PurchaseOrder] {
-        purchaseOrders.filter { po in
+        filteredPurchaseOrders.filter { po in
             po.status == "submitted"
                 && po.approvalControlStatus != "blocked"
                 && !po.approvalSteps.contains { $0.status == "pending" && $0.requiredRole == currentUserRole }
         }
     }
     private var completedNormal: [PurchaseOrder] {
-        purchaseOrders.filter { ($0.status == "approved" || $0.status == "rejected") && !$0.approvedWithException }
+        filteredPurchaseOrders.filter { ($0.status == "approved" || $0.status == "rejected") && !$0.approvedWithException }
     }
     private var completedWithException: [PurchaseOrder] {
-        purchaseOrders.filter { ($0.status == "approved" || $0.status == "rejected") && $0.approvedWithException }
+        filteredPurchaseOrders.filter { ($0.status == "approved" || $0.status == "rejected") && $0.approvedWithException }
     }
 
     // MARK: - Grouping by role
@@ -67,7 +86,7 @@ struct PurchaseOrderListView: View {
         var buckets: [String: [PurchaseOrder]] = [:]
         var noPendingStep: [PurchaseOrder] = []
 
-        for po in purchaseOrders {
+        for po in filteredPurchaseOrders {
             if po.status == "draft" {
                 buckets["requester", default: []].append(po)
             } else if let step = po.approvalSteps.first(where: { $0.status == "pending" }) {
@@ -99,13 +118,34 @@ struct PurchaseOrderListView: View {
                 .padding(8)
             }
 
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                TextField("Search by PO number or description", text: $searchText)
+                    .textFieldStyle(.plain)
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(8)
+            .background(Color.gray.opacity(0.1))
+            .cornerRadius(8)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 4)
+
             List(selection: $selection) {
                 if !canViewByRole || groupingMode == .byProgress {
                     group("Needs Your Action", items: actionRequired, systemImage: "exclamationmark.circle.fill", tint: .red)
                     group("Blocked", items: blocked, systemImage: "hand.raised.fill", tint: .orange)
                     group("In Progress", items: inProgress, systemImage: "clock.fill", tint: .yellow)
-                    group("Completed — Normal", items: completedNormal, systemImage: "checkmark.circle.fill", tint: .secondary)
-                    group("Completed — With Exception", items: completedWithException, systemImage: "exclamationmark.shield.fill", tint: .purple)
+                    group("Completed (Standard)", items: completedNormal, systemImage: "checkmark.circle.fill", tint: .secondary)
+                    group("Completed (With Exception)", items: completedWithException, systemImage: "exclamationmark.shield.fill", tint: .purple)
                 } else {
                     ForEach(byRoleGroups, id: \.role) { entry in
                         group(
@@ -121,14 +161,32 @@ struct PurchaseOrderListView: View {
         }
         .navigationTitle("Purchase Orders")
         .toolbar {
-            ToolbarItem {
-                Button("New PO") {
-                    showingCreateSheet = true
+            ToolbarItemGroup {
+                Button {
+                    onBackToDashboard()
+                } label: {
+                    Label("Dashboard", systemImage: "chevron.left")
                 }
-            }
-            ToolbarItem {
-                Button("Refresh") {
+
+                if canCreatePO {
+                    Button {
+                        showingCreateSheet = true
+                    } label: {
+                        Label("Create PO", systemImage: "plus.circle.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+
+                Button {
                     Task { await onReload() }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+
+                Button(role: .destructive) {
+                    APIClient.shared.logout()
+                } label: {
+                    Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
                 }
             }
         }
@@ -196,7 +254,7 @@ struct PurchaseOrderListView: View {
                     }
                 } label: {
                     Label("\(title) (\(items.count))", systemImage: systemImage)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.headline)
                         .foregroundColor(tint)
                 }
             }
@@ -208,30 +266,36 @@ struct PurchaseOrderListView: View {
         let risk = RiskStatus(rawValue: po.approvalControlStatus)
 
         HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 3)
+            RoundedRectangle(cornerRadius: 2)
                 .fill(risk.color)
                 .frame(width: 4)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("PO #\(po.id) — \(po.description)")
-                    .font(.headline)
+                Text("PO #\(po.id): \(po.description)")
+                    .font(.title3.weight(.semibold))
                 HStack(spacing: 6) {
                     Text("\(po.amount) \(po.currency)")
-                        .font(.subheadline)
+                        .font(.body)
                         .foregroundColor(.secondary)
                     Text("·")
                         .foregroundColor(.secondary)
-                    Text(risk.label + " risk")
-                        .font(.caption)
+                    Label(risk.label, systemImage: risk.icon)
+                        .font(.subheadline.weight(.medium))
                         .foregroundColor(risk.color)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(risk.color.opacity(0.12))
+                        .clipShape(Capsule())
                 }
             }
 
             Spacer()
             approvalProgressIndicator(for: po)
         }
-        .padding(.vertical, 6)
-        .background(risk.color.opacity(0.06))
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(Color.gray.opacity(0.04))
+        .cornerRadius(8)
     }
 
     @ViewBuilder
@@ -240,34 +304,34 @@ struct PurchaseOrderListView: View {
         case "approved":
             if po.approvedWithException {
                 Label("Approved (Exception)", systemImage: "checkmark.seal.fill")
-                    .font(.caption.weight(.medium))
+                    .font(.subheadline.weight(.medium))
                     .foregroundColor(.purple)
             } else {
                 Label("Approved", systemImage: "checkmark.seal.fill")
-                    .font(.caption.weight(.medium))
+                    .font(.subheadline.weight(.medium))
                     .foregroundColor(.green)
             }
         case "rejected":
             Label("Rejected", systemImage: "xmark.seal.fill")
-                .font(.caption.weight(.medium))
+                .font(.subheadline.weight(.medium))
                 .foregroundColor(.red)
         case "submitted":
             if po.approvalSteps.contains(where: { $0.status == "pending" && $0.requiredRole == currentUserRole }) {
                 Label("Awaiting You", systemImage: "person.crop.circle.badge.exclamationmark")
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundColor(.red)
             } else if let step = po.approvalSteps.first(where: { $0.status == "pending" }) {
                 Label("Awaiting \(step.requiredRole)", systemImage: "hourglass")
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
             } else {
                 Label("Blocked", systemImage: "hand.raised.fill")
-                    .font(.caption.weight(.medium))
+                    .font(.subheadline.weight(.medium))
                     .foregroundColor(.orange)
             }
         default:
             Label("Draft", systemImage: "doc.text")
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundColor(.secondary)
         }
     }

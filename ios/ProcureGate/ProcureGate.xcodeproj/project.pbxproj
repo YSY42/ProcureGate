@@ -18,6 +18,20 @@
 		F3C039FB30163AFB002FC2F8 /* CreateExceptionRequestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C039FA30163AF9002FC2F8 /* CreateExceptionRequestView.swift */; };
 		F3C039FD30165C87002FC2F8 /* AuditLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C039FC30165C85002FC2F8 /* AuditLogView.swift */; };
 		F3C039FF30167A63002FC2F8 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C039FE30167A61002FC2F8 /* DashboardView.swift */; };
+		F3C03A0330174FF0002FC2F8 /* PersonalRiskSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C03A0230174FEE002FC2F8 /* PersonalRiskSummaryView.swift */; };
+		F3C03A053017527E002FC2F8 /* PersonalDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C03A043017527C002FC2F8 /* PersonalDashboardView.swift */; };
+		F3C03A073017642E002FC2F8 /* SupplierRiskTierListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C03A063017642D002FC2F8 /* SupplierRiskTierListView.swift */; };
+		F3C03A0930176501002FC2F8 /* ExceptionDetailListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C03A0830176500002FC2F8 /* ExceptionDetailListView.swift */; };
+		F3C03A0B30176503002FC2F8 /* TriggerReasonDetailListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C03A0A30176502002FC2F8 /* TriggerReasonDetailListView.swift */; };
+		F3C03A0D30176505002FC2F8 /* PurchaseOrderTierDrillDownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C03A0C30176504002FC2F8 /* PurchaseOrderTierDrillDownView.swift */; };
+		F3C03A4530177237002FC2F8 /* BlockedAttemptsDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C03A4430177235002FC2F8 /* BlockedAttemptsDetailView.swift */; };
+		F3C03A493017727E002FC2F8 /* DriftDrillDownTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C03A483017727E002FC2F8 /* DriftDrillDownTarget.swift */; };
+		F3C03A4B30177917002FC2F8 /* DateFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C03A4A30177915002FC2F8 /* DateFormatting.swift */; };
+		F3C0007CF9AE75DA46DF40FC /* ApprovalTimeDetailListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C090C0ED8CAE8171347A3C /* ApprovalTimeDetailListView.swift */; };
+		F3C0117883D4AF4A0FD4840E /* POLoadingDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C069023D930CD8F6CE1096 /* POLoadingDetailView.swift */; };
+		F3C0845D9B839267F709A8D1 /* SupplierDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C0B204C035EE367C05C25D /* SupplierDetailView.swift */; };
+		F11A10869094D3495E38F6B3 /* PendingExceptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C85E1DF7F4580C254EA0977A /* PendingExceptionsView.swift */; };
+		92D3F0471A7654AE55C19864 /* RiskSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7463ED62A91910D78DA6B9F7 /* RiskSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -52,6 +66,20 @@
 		F3C039FA30163AF9002FC2F8 /* CreateExceptionRequestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateExceptionRequestView.swift; sourceTree = "<group>"; };
 		F3C039FC30165C85002FC2F8 /* AuditLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditLogView.swift; sourceTree = "<group>"; };
 		F3C039FE30167A61002FC2F8 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		F3C03A0230174FEE002FC2F8 /* PersonalRiskSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalRiskSummaryView.swift; sourceTree = "<group>"; };
+		F3C03A043017527C002FC2F8 /* PersonalDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalDashboardView.swift; sourceTree = "<group>"; };
+		F3C03A063017642D002FC2F8 /* SupplierRiskTierListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupplierRiskTierListView.swift; sourceTree = "<group>"; };
+		F3C03A0830176500002FC2F8 /* ExceptionDetailListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExceptionDetailListView.swift; sourceTree = "<group>"; };
+		F3C03A0A30176502002FC2F8 /* TriggerReasonDetailListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriggerReasonDetailListView.swift; sourceTree = "<group>"; };
+		F3C03A0C30176504002FC2F8 /* PurchaseOrderTierDrillDownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseOrderTierDrillDownView.swift; sourceTree = "<group>"; };
+		F3C03A4430177235002FC2F8 /* BlockedAttemptsDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedAttemptsDetailView.swift; sourceTree = "<group>"; };
+		F3C03A483017727E002FC2F8 /* DriftDrillDownTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriftDrillDownTarget.swift; sourceTree = "<group>"; };
+		F3C03A4A30177915002FC2F8 /* DateFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateFormatting.swift; sourceTree = "<group>"; };
+		F3C090C0ED8CAE8171347A3C /* ApprovalTimeDetailListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalTimeDetailListView.swift; sourceTree = "<group>"; };
+		F3C069023D930CD8F6CE1096 /* POLoadingDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = POLoadingDetailView.swift; sourceTree = "<group>"; };
+		F3C0B204C035EE367C05C25D /* SupplierDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupplierDetailView.swift; sourceTree = "<group>"; };
+		C85E1DF7F4580C254EA0977A /* PendingExceptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingExceptionsView.swift; sourceTree = "<group>"; };
+		7463ED62A91910D78DA6B9F7 /* RiskSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiskSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -145,7 +173,18 @@
 		F3C039E030150EA4002FC2F8 /* View */ = {
 			isa = PBXGroup;
 			children = (
+				F3C03A4430177235002FC2F8 /* BlockedAttemptsDetailView.swift */,
+				F3C03A0C30176504002FC2F8 /* PurchaseOrderTierDrillDownView.swift */,
+				F3C03A0A30176502002FC2F8 /* TriggerReasonDetailListView.swift */,
+				F3C03A0830176500002FC2F8 /* ExceptionDetailListView.swift */,
+				F3C090C0ED8CAE8171347A3C /* ApprovalTimeDetailListView.swift */,
+				F3C069023D930CD8F6CE1096 /* POLoadingDetailView.swift */,
+				F3C0B204C035EE367C05C25D /* SupplierDetailView.swift */,
+				F3C03A063017642D002FC2F8 /* SupplierRiskTierListView.swift */,
+				F3C03A043017527C002FC2F8 /* PersonalDashboardView.swift */,
+				F3C03A0230174FEE002FC2F8 /* PersonalRiskSummaryView.swift */,
 				F3C039FE30167A61002FC2F8 /* DashboardView.swift */,
+				F3C03A483017727E002FC2F8 /* DriftDrillDownTarget.swift */,
 				F3C039FC30165C85002FC2F8 /* AuditLogView.swift */,
 				F3C039FA30163AF9002FC2F8 /* CreateExceptionRequestView.swift */,
 				F3C039F030155A14002FC2F8 /* CreatePurchaseOrderView.swift */,
@@ -153,6 +192,8 @@
 				F3C039EC3015213A002FC2F8 /* PurchaseOrderListView.swift */,
 				F3C039E130150EC2002FC2F8 /* LoginView.swift */,
 				F3C039F5301566BC002FC2F8 /* StatusBadge.swift */,
+				C85E1DF7F4580C254EA0977A /* PendingExceptionsView.swift */,
+				7463ED62A91910D78DA6B9F7 /* RiskSettingsView.swift */,
 			);
 			path = View;
 			sourceTree = "<group>";
@@ -160,6 +201,7 @@
 		F3C039F23015667F002FC2F8 /* DesignSystem */ = {
 			isa = PBXGroup;
 			children = (
+				F3C03A4A30177915002FC2F8 /* DateFormatting.swift */,
 				F3C039F43015669E002FC2F8 /* RiskStatus.swift */,
 			);
 			path = DesignSystem;
@@ -309,9 +351,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F3C03A0930176501002FC2F8 /* ExceptionDetailListView.swift in Sources */,
+				F3C03A0B30176503002FC2F8 /* TriggerReasonDetailListView.swift in Sources */,
+				F3C03A4B30177917002FC2F8 /* DateFormatting.swift in Sources */,
+				F3C03A493017727E002FC2F8 /* DriftDrillDownTarget.swift in Sources */,
+				F3C03A0D30176505002FC2F8 /* PurchaseOrderTierDrillDownView.swift in Sources */,
+				F3C03A0330174FF0002FC2F8 /* PersonalRiskSummaryView.swift in Sources */,
+				F3C03A073017642E002FC2F8 /* SupplierRiskTierListView.swift in Sources */,
 				F3C039E4301516C3002FC2F8 /* LoginView.swift in Sources */,
 				F3C039FB30163AFB002FC2F8 /* CreateExceptionRequestView.swift in Sources */,
 				F3C039F630156737002FC2F8 /* RiskStatus.swift in Sources */,
+				F3C03A053017527E002FC2F8 /* PersonalDashboardView.swift in Sources */,
 				F3C039ED3015213C002FC2F8 /* PurchaseOrderListView.swift in Sources */,
 				F3C039EF301525C5002FC2F8 /* PurchaseOrderDetailView.swift in Sources */,
 				F3C039F73015673E002FC2F8 /* StatusBadge.swift in Sources */,
@@ -319,7 +369,13 @@
 				F3C039FD30165C87002FC2F8 /* AuditLogView.swift in Sources */,
 				F3C039F130155A1B002FC2F8 /* CreatePurchaseOrderView.swift in Sources */,
 				F3C039FF30167A63002FC2F8 /* DashboardView.swift in Sources */,
+				F3C03A4530177237002FC2F8 /* BlockedAttemptsDetailView.swift in Sources */,
 				F3C039E730151C29002FC2F8 /* APIClient.swift in Sources */,
+				F3C0007CF9AE75DA46DF40FC /* ApprovalTimeDetailListView.swift in Sources */,
+				F3C0117883D4AF4A0FD4840E /* POLoadingDetailView.swift in Sources */,
+				F3C0845D9B839267F709A8D1 /* SupplierDetailView.swift in Sources */,
+				F11A10869094D3495E38F6B3 /* PendingExceptionsView.swift in Sources */,
+				92D3F0471A7654AE55C19864 /* RiskSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

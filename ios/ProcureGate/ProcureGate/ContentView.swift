@@ -13,23 +13,42 @@ struct ContentView: View {
     }
 
     var body: some View {
-            if client.accessToken != nil {
-                if client.currentUser == nil {
-                    ProgressView("Loading profile…")
-                } else if !hasEnteredWorkspace && (client.currentUser?.role == "procurement_lead" || client.currentUser?.role == "auditor") {
-                    dashboardHomeScreen
-                } else if client.currentUser?.role == "auditor" {
-                    TabView {
+            Group {
+                if client.accessToken != nil {
+                    if client.currentUser == nil {
+                        ProgressView("Loading profile…")
+                    } else if !hasEnteredWorkspace {
+                        homeScreen
+                    } else if client.currentUser?.role == "auditor" {
                         AuditLogView(onReturnToDashboard: { hasEnteredWorkspace = false })
-                            .tabItem { Label("Audit Trail", systemImage: "list.bullet.rectangle") }
-                        DashboardView()
-                            .tabItem { Label("Dashboard", systemImage: "chart.bar") }
+                    } else {
+                        poListSplitView
                     }
                 } else {
-                    poListSplitView
+                    LoginView()
                 }
-            } else {
-                LoginView()
+            }
+            .task(id: client.accessToken) {
+                if client.accessToken != nil {
+                    POStatusNotifier.shared.requestAuthorizationIfNeeded()
+                    POStatusNotifier.shared.startPolling()
+                } else {
+                    POStatusNotifier.shared.stopPolling()
+                }
+            }
+        }
+
+        @ViewBuilder
+        private var homeScreen: some View {
+            switch client.currentUser?.role {
+            case "procurement_lead", "auditor":
+                dashboardHomeScreen
+            case "requester":
+                PersonalDashboardView(scope: .requester) { hasEnteredWorkspace = true }
+            case "department_approver":
+                PersonalDashboardView(scope: .approver) { hasEnteredWorkspace = true }
+            default:
+                poListSplitView // fallback, shouldn't normally hit this
             }
         }
     
@@ -60,41 +79,28 @@ struct ContentView: View {
                     selection: $selectedID,
                     isLoading: isLoading,
                     errorMessage: $errorMessage,
-                    onReload: { await loadPurchaseOrders() }
+                    onReload: { await loadPurchaseOrders() },
+                    onBackToDashboard: { hasEnteredWorkspace = false }
                 )
             } detail: {
-                VStack(spacing: 0) {
-                    backToDashboardBar
-
-                    if let selectedPO {
-                        PurchaseOrderDetailView(po: selectedPO) {
-                            Task { await loadPurchaseOrders() }
-                        }
-                    } else {
-                        Text("Select a purchase order")
-                            .foregroundColor(.secondary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if let selectedPO {
+                    PurchaseOrderDetailView(po: selectedPO) {
+                        Task { await loadPurchaseOrders() }
                     }
+                } else {
+                    ContentUnavailableView(
+                        "Select a Purchase Order",
+                        systemImage: "doc.text.magnifyingglass",
+                        description: Text("Choose an order from the list to view its details and approval status.")
+                    )
                 }
             }
             .task {
                 await loadPurchaseOrders()
             }
-        }
-
-        private var backToDashboardBar: some View {
-            HStack {
-                Button {
-                    hasEnteredWorkspace = false
-                } label: {
-                    Label("Back to Dashboard", systemImage: "chevron.left")
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.blue)
-                Spacer()
+            .onAppear {
+                POStatusNotifier.shared.markAllSeen()
             }
-            .padding(10)
-            .background(Color.gray.opacity(0.08))
         }
 
     private func loadPurchaseOrders() async {
