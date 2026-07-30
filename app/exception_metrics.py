@@ -46,28 +46,49 @@ def count_recent_approved_exceptions(db: Session, supplier_id: int, days: int = 
 
 def top_suppliers_by_recent_exceptions(
     db: Session, days: int = 90, limit: int = 5
-) -> list[tuple[int, str, int]]:
+) -> list[tuple[int, str, int, float]]:
     """Signal #1 (highest confidence): a supplier repeatedly appearing in
     the exception log, regardless of how reasonable each individual
     approval looked, is itself the pattern worth surfacing — this is the
     normalization-of-deviance signal, made visible instead of relying on
     anyone noticing it manually across dozens of individually-reasonable
-    decisions."""
+    decisions.
+
+    Returns (supplier_id, name, count, total_amount_eur) — a supplier
+    granted one exception on a EUR 500k order and one granted three
+    exceptions on EUR 800 orders are not the same magnitude of risk
+    conversation, and count alone conflates them. EUR-normalized the same
+    way risk_tier_amount_exposure already is, not a second scheme."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     rows = (
-        db.query(PurchaseOrder.supplier_id, Supplier.name, func.count(ExceptionRequest.id))
+        db.query(
+            PurchaseOrder.supplier_id,
+            Supplier.name,
+            PurchaseOrder.amount,
+            PurchaseOrder.currency,
+        )
         .join(ExceptionRequest, ExceptionRequest.purchase_order_id == PurchaseOrder.id)
         .join(Supplier, Supplier.id == PurchaseOrder.supplier_id)
         .filter(
             ExceptionRequest.status == ExceptionStatus.approved,
             ExceptionRequest.decided_at >= cutoff,
         )
-        .group_by(PurchaseOrder.supplier_id, Supplier.name)
-        .order_by(func.count(ExceptionRequest.id).desc())
-        .limit(limit)
         .all()
     )
-    return [(supplier_id, name, count) for supplier_id, name, count in rows]
+    aggregated: dict[int, dict] = {}
+    for supplier_id, name, amount, currency in rows:
+        rate = FX_RATES_TO_EUR.get(currency, 1.0)
+        entry = aggregated.setdefault(
+            supplier_id, {"name": name, "count": 0, "total_amount_eur": 0.0}
+        )
+        entry["count"] += 1
+        entry["total_amount_eur"] += float(amount) * rate
+
+    ranked = sorted(aggregated.items(), key=lambda kv: kv[1]["count"], reverse=True)[:limit]
+    return [
+        (supplier_id, data["name"], data["count"], data["total_amount_eur"])
+        for supplier_id, data in ranked
+    ]
 
 
 class TriggerReasonDetail:

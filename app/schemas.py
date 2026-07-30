@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models import (
     ApprovalControlStatus,
@@ -72,6 +72,8 @@ class SupplierUpdateRequest(BaseModel):
     defect_rate: float | None = Field(default=None, ge=0, le=100)
     esg_rating: float | None = Field(default=None, ge=0, le=100)
     sanctions_flag: bool | None = None
+    needs_reassessment: bool | None = None
+    reassessment_note: str | None = None
 
 
 class SupplierResponse(BaseModel):
@@ -88,6 +90,11 @@ class SupplierResponse(BaseModel):
     sanctions_flag: bool
     assessed_at: datetime | None
     computed_risk_tier: RiskTier | None
+    inherent_risk_tier: RiskTier
+    performance_risk_tier: RiskTier | None
+    compliance_risk_tier: RiskTier | None
+    needs_reassessment: bool
+    reassessment_note: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -126,7 +133,13 @@ class PurchaseOrderResponse(BaseModel):
 
     id: int
     requester_id: int
+    requester_email: str
     supplier_id: int
+    supplier_name: str
+    supplier_risk_tier: RiskTier | None
+    supplier_inherent_risk_tier: RiskTier
+    supplier_performance_risk_tier: RiskTier | None
+    supplier_compliance_risk_tier: RiskTier | None
     amount: Decimal
     currency: str
     description: str
@@ -142,6 +155,39 @@ class PurchaseOrderResponse(BaseModel):
 
 class TransitionRequest(BaseModel):
     action: str = Field(pattern="^(submit|approve|reject|cancel)$")
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def require_reason_for_reject(self) -> "TransitionRequest":
+        if self.action == "reject" and not (self.reason and self.reason.strip()):
+            raise ValueError("A reason is required to reject a purchase order")
+        return self
+
+
+class EscalateRequest(BaseModel):
+    """The middle option between approve/reject: does not decide the step
+    (it stays pending, still actionable by anyone with step authority) —
+    only records that the decision-maker asked for a second look, and why."""
+
+    note: str = Field(min_length=1)
+
+
+class RiskThresholdResponse(BaseModel):
+    """procurement_lead's self-service view of the risk model's calibration
+    — a null field means "using the config.py default", not "unset and
+    broken"."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    esg_compliance_floor: float | None
+    esg_elevated_margin: float | None
+    updated_by_id: int | None
+    updated_at: datetime
+
+
+class RiskThresholdUpdateRequest(BaseModel):
+    esg_compliance_floor: float | None = Field(default=None, ge=0, le=100)
+    esg_elevated_margin: float | None = Field(default=None, ge=0, le=100)
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +203,13 @@ class ExceptionRequestCreate(BaseModel):
 
 
 class ExceptionDecisionRequest(BaseModel):
+    """Approving an exception is one of the most concentrated-risk actions
+    in the system (it overrides a block the risk model raised on purpose) —
+    a reason is required for both outcomes, not just rejection, so "why we
+    overrode the model this time" is always on record."""
+
     decision: str = Field(pattern="^(approved|rejected)$")
+    reason: str = Field(min_length=1)
 
 
 class ExceptionRequestResponse(BaseModel):
@@ -173,6 +225,20 @@ class ExceptionRequestResponse(BaseModel):
     decided_by_id: int | None
     decided_at: datetime | None
     recent_exception_count_for_supplier: int | None = None
+
+
+class ExceptionRequestDetailResponse(ExceptionRequestResponse):
+    """Enriches the base response with the PO/supplier/requester context a
+    decision-maker needs without a second round-trip per row — backs the
+    pending-exceptions list, which didn't exist before this: procurement_lead
+    previously had no way to discover a pending exception except knowing its
+    id out of band."""
+
+    po_description: str
+    po_amount: Decimal
+    po_currency: str
+    supplier_name: str
+    requester_email: str
 
 
 # ---------------------------------------------------------------------------
@@ -203,11 +269,22 @@ class TriggerReasonDetailResponse(BaseModel):
     metadata: dict | None = None
 
 
+class RequesterSupplierHistoryResponse(BaseModel):
+    """Backs the approver-facing "has this requester been blocked against
+    this same supplier before" check — surfaced at decision time instead of
+    only being discoverable later from procurement_lead's aggregate drift
+    signals."""
+
+    blocked_count: int
+    details: list[TriggerReasonDetailResponse]
+
+
 class RequesterDashboard(BaseModel):
     my_purchase_orders: list[PurchaseOrderResponse]
     my_control_status_breakdown: dict[str, int]
     my_trigger_reason_breakdown: dict[str, int]
     my_trigger_reason_details: list[TriggerReasonDetailResponse]
+    avg_approval_time_by_tier: dict[str, float | None]
 
 
 class ApproverDashboard(BaseModel):
@@ -231,6 +308,7 @@ class SupplierExceptionSignal(BaseModel):
     supplier_id: int
     supplier_name: str
     count: int
+    total_amount_eur: float
 
 
 class RequesterExceptionSignal(BaseModel):
@@ -261,6 +339,35 @@ class BlockedAttemptDetail(BaseModel):
     at: datetime
 
 
+class EscalatedApprovalDetail(BaseModel):
+    """A pending PO an approver flagged for a second look instead of
+    approving or rejecting outright — the middle option between the two,
+    surfaced to procurement_lead since department_approver has no direct
+    audit-trail visibility of their own."""
+
+    po_id: int
+    description: str
+    requester_email: str
+    step_number: int
+    note: str
+    actor_email: str
+    actor_role_at_time: str
+    at: datetime
+
+
+class TeamPendingAging(BaseModel):
+    """Pending-approval aging broken down by team rather than by named
+    individual — approval steps are authorized by role + team match (any
+    department_approver on the requester's team may act), not assigned to
+    one specific person, so "team" is the unit that can actually go
+    unstaffed/backlogged in this system's authorization model."""
+
+    team: str
+    pending_count: int
+    avg_days_pending: float | None
+    oldest_pending_days: int | None
+
+
 class ProcurementLeadDashboard(BaseModel):
     blocked_creation_attempts: int
     blocked_creation_attempt_details: list[BlockedAttemptDetail]
@@ -270,6 +377,8 @@ class ProcurementLeadDashboard(BaseModel):
     risk_tier_amount_distribution: dict[str, float]
     avg_approval_time_by_tier: dict[str, float | None]
     pending_approval_aging: AgingStats
+    pending_approval_aging_by_team: list[TeamPendingAging]
+    escalated_approvals: list[EscalatedApprovalDetail]
     exception_drift_signals: ExceptionDriftSignals
 
 

@@ -53,7 +53,7 @@ def test_self_approval_rejected(client, db, requester_token, procurement_lead_to
 
     decision_resp = client.post(
         f"/api/v1/exception-requests/{exception_id}/decision",
-        json={"decision": "approved"},
+        json={"decision": "approved", "reason": "Looks fine to me"},
         headers=auth_headers(procurement_lead_token),
     )
     assert decision_resp.status_code == 403
@@ -78,7 +78,7 @@ def test_cross_approver_approval_flags_po_with_distinct_audit_entries(
 
     decision_resp = client.post(
         f"/api/v1/exception-requests/{exception_id}/decision",
-        json={"decision": "approved"},
+        json={"decision": "approved", "reason": "Justification checks out, urgency is genuine"},
         headers=auth_headers(procurement_lead_token),
     )
     assert decision_resp.status_code == 200

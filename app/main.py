@@ -7,6 +7,7 @@ from app.routers import auth as auth_router
 from app.routers import dashboard as dashboard_router
 from app.routers import exceptions as exceptions_router
 from app.routers import purchase_orders as purchase_orders_router
+from app.routers import risk_settings as risk_settings_router
 from app.routers import suppliers as suppliers_router
 from app.routers import users as users_router
 
@@ -25,6 +26,7 @@ app.include_router(suppliers_router.router)
 app.include_router(purchase_orders_router.router)
 app.include_router(exceptions_router.router)
 app.include_router(dashboard_router.router)
+app.include_router(risk_settings_router.router)
 
 # User Story 5 (auditor role) additions land in dashboard.py in Phase 7
 # (see tasks.md T055-T056).

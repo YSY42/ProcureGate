@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.audit import write_audit_entry
@@ -21,10 +21,25 @@ from app.risk_engine import _as_naive_utc
 from app.schemas import (
     ExceptionDecisionRequest,
     ExceptionRequestCreate,
+    ExceptionRequestDetailResponse,
     ExceptionRequestResponse,
 )
 
 router = APIRouter(prefix="/api/v1/exception-requests", tags=["exception-requests"])
+
+
+@router.get("", response_model=list[ExceptionRequestDetailResponse])
+def list_exception_requests(
+    status_filter: ExceptionStatus | None = Query(default=None, alias="status"),
+    db: Session = Depends(get_db),
+    caller: User = Depends(require_roles(Role.procurement_lead, Role.auditor)),
+) -> list[ExceptionRequest]:
+    """Previously did not exist at all — procurement_lead had no way to
+    discover a pending exception request except knowing its id out of band.
+    Defaults to pending, since that's the actionable queue."""
+    query = db.query(ExceptionRequest)
+    query = query.filter(ExceptionRequest.status == (status_filter or ExceptionStatus.pending))
+    return query.order_by(ExceptionRequest.expiry_at).all()
 
 
 @router.post("", response_model=ExceptionRequestResponse, status_code=status.HTTP_201_CREATED)
@@ -65,6 +80,7 @@ def create_exception_request(
             f"{caller.email} requested an exception for PO {po.id} "
             f"(urgency={payload.urgency.value})"
         ),
+        metadata={"po_id": str(po.id), "urgency": payload.urgency.value},
     )
 
     db.commit()
@@ -111,6 +127,25 @@ def decide_exception_request(
     # even though the route already requires procurement_lead — a
     # procurement_lead can still be the original requester.
     if caller.id == exception_request.requested_by_id:
+        write_audit_entry(
+            db,
+            entity_type="exception_request",
+            entity_id=exception_request.id,
+            action_type=AuditActionType.self_approval_blocked,
+            actor_id=caller.id,
+            rationale=(
+                f"{caller.email} attempted to decide their own exception request "
+                f"for PO {exception_request.purchase_order_id} — blocked "
+                f"(segregation of duties)"
+            ),
+            metadata={
+                "po_id": str(exception_request.purchase_order_id),
+                "exception_request_id": str(exception_request.id),
+                "actor_email": caller.email,
+                "actor_role_at_time": caller.role.value,
+            },
+        )
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot approve or reject your own exception request",
@@ -132,7 +167,13 @@ def decide_exception_request(
             entity_id=exception_request.id,
             action_type=AuditActionType.exception_approved,
             actor_id=caller.id,
-            rationale=f"{caller.email} approved exception request for PO {po.id}",
+            rationale=f"{caller.email} approved exception request for PO {po.id} — {payload.reason}",
+            metadata={
+                "po_id": str(po.id),
+                "actor_email": caller.email,
+                "actor_role_at_time": caller.role.value,
+                "reason": payload.reason,
+            },
         )
         write_audit_entry(
             db,
@@ -142,8 +183,15 @@ def decide_exception_request(
             actor_id=caller.id,
             rationale=(
                 f"PO {po.id} approved via exception (exception_request_id="
-                f"{exception_request.id})"
+                f"{exception_request.id}) — {payload.reason}"
             ),
+            metadata={
+                "po_id": str(po.id),
+                "exception_request_id": str(exception_request.id),
+                "actor_email": caller.email,
+                "actor_role_at_time": caller.role.value,
+                "reason": payload.reason,
+            },
         )
     else:
         exception_request.status = ExceptionStatus.rejected
@@ -153,7 +201,13 @@ def decide_exception_request(
             entity_id=exception_request.id,
             action_type=AuditActionType.exception_rejected,
             actor_id=caller.id,
-            rationale=f"{caller.email} rejected exception request for PO {po.id}",
+            rationale=f"{caller.email} rejected exception request for PO {po.id} — {payload.reason}",
+            metadata={
+                "po_id": str(po.id),
+                "actor_email": caller.email,
+                "actor_role_at_time": caller.role.value,
+                "reason": payload.reason,
+            },
         )
 
     db.commit()

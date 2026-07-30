@@ -39,6 +39,7 @@ from app.schemas import (
     ApproverDashboard,
     AuditLogEntryResponse,
     BlockedAttemptDetail,
+    EscalatedApprovalDetail,
     ExceptionCounts,
     ExceptionDetailResponse,
     ExceptionDriftSignals,
@@ -47,6 +48,7 @@ from app.schemas import (
     RequesterExceptionSignal,
     RoleElevationLogEntry,
     SupplierExceptionSignal,
+    TeamPendingAging,
     TriggerReasonDetailResponse,
 )
 
@@ -64,6 +66,102 @@ def _aging_stats(pos: list[PurchaseOrder], now: datetime) -> AgingStats:
     if not ages:
         return AgingStats(avg_days_pending=None, oldest_pending_days=None)
     return AgingStats(avg_days_pending=mean(ages), oldest_pending_days=max(ages))
+
+
+def _avg_approval_time_by_tier(db: Session) -> dict[str, float | None]:
+    """Mean days from submitted_at to decided_at for approved POs, grouped by
+    the deciding supplier's computed_risk_tier. Shared by the procurement-lead
+    dashboard (system-wide control metric) and the requester dashboard (a
+    "how long should I expect to wait" benchmark) — same computation, two
+    audiences, not two implementations."""
+    result: dict[str, float | None] = {tier.value: None for tier in RiskTier}
+    decided = (
+        db.query(PurchaseOrder)
+        .filter(
+            PurchaseOrder.status == POStatus.approved,
+            PurchaseOrder.decided_at.isnot(None),
+            PurchaseOrder.submitted_at.isnot(None),
+        )
+        .all()
+    )
+    by_tier: dict[str, list[float]] = {tier.value: [] for tier in RiskTier}
+    for po in decided:
+        supplier = db.get(Supplier, po.supplier_id)
+        if supplier and supplier.computed_risk_tier:
+            days = (
+                _as_naive_utc(po.decided_at) - _as_naive_utc(po.submitted_at)
+            ).total_seconds() / 86400
+            by_tier[supplier.computed_risk_tier.value].append(days)
+    for tier_value, values in by_tier.items():
+        if values:
+            result[tier_value] = mean(values)
+    return result
+
+
+def _pending_approval_aging_by_team(pending: list[PurchaseOrder], now: datetime) -> list[TeamPendingAging]:
+    """Grouped by team, not by named approver: approval steps are
+    authorized by role + team match (any department_approver on the
+    requester's team may act — see _require_step_authority), so a team is
+    the unit that can actually go unstaffed/backlogged here, not an
+    individual. Scoped to POs whose *current* step needs department_approver
+    specifically, not the whole submitted queue (which also includes
+    procurement_lead-owned steps)."""
+    approver_pending = [
+        po
+        for po in pending
+        if any(
+            s.step_number == po.current_step_number and s.required_role == Role.department_approver
+            for s in po.approval_steps
+        )
+    ]
+    by_team: dict[str, list[PurchaseOrder]] = {}
+    for po in approver_pending:
+        team = po.requester.team or "Unassigned"
+        by_team.setdefault(team, []).append(po)
+
+    result = []
+    for team, pos in by_team.items():
+        stats = _aging_stats(pos, now)
+        result.append(
+            TeamPendingAging(
+                team=team,
+                pending_count=len(pos),
+                avg_days_pending=stats.avg_days_pending,
+                oldest_pending_days=stats.oldest_pending_days,
+            )
+        )
+    return sorted(result, key=lambda t: t.oldest_pending_days or 0, reverse=True)
+
+
+def _escalated_approvals(db: Session) -> list[EscalatedApprovalDetail]:
+    entries = (
+        db.query(AuditLogEntry)
+        .filter(
+            AuditLogEntry.entity_type == "purchase_order",
+            AuditLogEntry.action_type == AuditActionType.approval_escalated,
+        )
+        .order_by(AuditLogEntry.created_at.desc())
+        .all()
+    )
+    details = []
+    for entry in entries:
+        po = db.get(PurchaseOrder, entry.entity_id)
+        if po is None:
+            continue
+        metadata = entry.metadata_json or {}
+        details.append(
+            EscalatedApprovalDetail(
+                po_id=po.id,
+                description=po.description,
+                requester_email=po.requester.email,
+                step_number=int(metadata.get("step_number", 0)),
+                note=metadata.get("note", ""),
+                actor_email=metadata.get("actor_email", ""),
+                actor_role_at_time=metadata.get("actor_role_at_time", ""),
+                at=entry.created_at,
+            )
+        )
+    return details
 
 
 def _requester_dashboard(db: Session, caller: User) -> RequesterDashboard:
@@ -88,6 +186,7 @@ def _requester_dashboard(db: Session, caller: User) -> RequesterDashboard:
             )
             for d in po_trigger_reason_details(db, po_ids)
         ],
+        avg_approval_time_by_tier=_avg_approval_time_by_tier(db),
     )
 
 
@@ -202,38 +301,19 @@ def _procurement_lead_dashboard(db: Session) -> ProcurementLeadDashboard:
     ):
         risk_tier_distribution[row.computed_risk_tier.value] += 1
 
-    avg_approval_time_by_tier: dict[str, float | None] = {tier.value: None for tier in RiskTier}
-    decided = (
-        db.query(PurchaseOrder)
-        .filter(
-            PurchaseOrder.status == POStatus.approved,
-            PurchaseOrder.decided_at.isnot(None),
-            PurchaseOrder.submitted_at.isnot(None),
-        )
-        .all()
-    )
-    by_tier: dict[str, list[float]] = {tier.value: [] for tier in RiskTier}
-    for po in decided:
-        supplier = db.get(Supplier, po.supplier_id)
-        if supplier and supplier.computed_risk_tier:
-            days = (
-                _as_naive_utc(po.decided_at) - _as_naive_utc(po.submitted_at)
-            ).total_seconds() / 86400
-            by_tier[supplier.computed_risk_tier.value].append(days)
-    for tier_value, values in by_tier.items():
-        if values:
-            avg_approval_time_by_tier[tier_value] = mean(values)
+    avg_approval_time_by_tier = _avg_approval_time_by_tier(db)
 
     pending = (
         db.query(PurchaseOrder)
+        .options(joinedload(PurchaseOrder.approval_steps))
         .filter(PurchaseOrder.status == POStatus.submitted)
         .all()
     )
 
     drift_window_days = 90
     top_suppliers = [
-        SupplierExceptionSignal(supplier_id=sid, supplier_name=name, count=count)
-        for sid, name, count in top_suppliers_by_recent_exceptions(db, days=drift_window_days)
+        SupplierExceptionSignal(supplier_id=sid, supplier_name=name, count=count, total_amount_eur=amount)
+        for sid, name, count, amount in top_suppliers_by_recent_exceptions(db, days=drift_window_days)
     ]
     top_requesters = [
         RequesterExceptionSignal(requester_id=uid, requester_email=email, count=count)
@@ -261,6 +341,8 @@ def _procurement_lead_dashboard(db: Session) -> ProcurementLeadDashboard:
         risk_tier_amount_distribution=risk_tier_amount_exposure(db),
         avg_approval_time_by_tier=avg_approval_time_by_tier,
         pending_approval_aging=_aging_stats(pending, now),
+        pending_approval_aging_by_team=_pending_approval_aging_by_team(pending, now),
+        escalated_approvals=_escalated_approvals(db),
         exception_drift_signals=ExceptionDriftSignals(
             window_days=drift_window_days,
             top_suppliers=top_suppliers,

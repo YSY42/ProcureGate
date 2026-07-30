@@ -97,6 +97,10 @@ class AuditActionType(str, enum.Enum):
     po_creation_blocked = "po_creation_blocked"
     supplier_status_change = "supplier_status_change"
     role_elevation = "role_elevation"
+    self_approval_blocked = "self_approval_blocked"
+    approval_escalated = "approval_escalated"
+    supplier_flagged_for_reassessment = "supplier_flagged_for_reassessment"
+    risk_threshold_overridden = "risk_threshold_overridden"
 
 
 class User(Base):
@@ -143,6 +147,41 @@ class Supplier(Base):
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
+    # A drift signal (e.g. repeated exceptions) gives procurement_lead a
+    # reason to distrust this supplier's current data — this is the lever
+    # to act on that belief directly, instead of only being able to look.
+    needs_reassessment: Mapped[bool] = mapped_column(Boolean, default=False)
+    reassessment_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Per-layer risk tiers (research.md Decision 5 computes the worst of
+    # these three as the aggregate computed_risk_tier, but only the
+    # aggregate was ever surfaced to a decision-maker — an approver seeing
+    # "Conditional" has no way to tell whether that came from country risk,
+    # delivery performance, or ESG/sanctions without this breakdown).
+    # Deferred imports avoid a circular import: risk_engine.py imports from
+    # this module.
+    @property
+    def inherent_risk_tier(self) -> "RiskTier":
+        from app.risk_engine import compute_inherent_risk
+
+        return compute_inherent_risk(self.country, self.category)
+
+    @property
+    def performance_risk_tier(self) -> "RiskTier | None":
+        from app.risk_engine import compute_performance_risk
+
+        if self.delivery_reliability_score is None or self.defect_rate is None:
+            return None
+        return compute_performance_risk(self.delivery_reliability_score, self.defect_rate)
+
+    @property
+    def compliance_risk_tier(self) -> "RiskTier | None":
+        from app.risk_engine import compute_compliance_risk
+
+        if self.esg_rating is None:
+            return None
+        return compute_compliance_risk(self.esg_rating, self.sanctions_flag)
+
 
 class PurchaseOrder(Base):
     __tablename__ = "purchase_orders"
@@ -175,6 +214,30 @@ class PurchaseOrder(Base):
     approval_steps: Mapped[list["ApprovalStep"]] = relationship(
         back_populates="purchase_order", order_by="ApprovalStep.step_number"
     )
+
+    @property
+    def supplier_name(self) -> str:
+        return self.supplier.name
+
+    @property
+    def requester_email(self) -> str:
+        return self.requester.email
+
+    @property
+    def supplier_risk_tier(self) -> RiskTier | None:
+        return self.supplier.computed_risk_tier
+
+    @property
+    def supplier_inherent_risk_tier(self) -> RiskTier:
+        return self.supplier.inherent_risk_tier
+
+    @property
+    def supplier_performance_risk_tier(self) -> RiskTier | None:
+        return self.supplier.performance_risk_tier
+
+    @property
+    def supplier_compliance_risk_tier(self) -> RiskTier | None:
+        return self.supplier.compliance_risk_tier
 
 
 class ApprovalStep(Base):
@@ -217,6 +280,32 @@ class ExceptionRequest(Base):
     )
 
     purchase_order: Mapped["PurchaseOrder"] = relationship()
+    requester: Mapped["User"] = relationship(foreign_keys=[requested_by_id])
+
+    # Decision-list display needs PO/supplier/requester context without a
+    # second round-trip per row — requested_by_id can differ from the PO's
+    # own requester_id (a department_approver or procurement_lead may file
+    # the exception on a requester's behalf), so this is looked up
+    # independently rather than assumed to match the PO.
+    @property
+    def po_description(self) -> str:
+        return self.purchase_order.description
+
+    @property
+    def po_amount(self) -> float:
+        return self.purchase_order.amount
+
+    @property
+    def po_currency(self) -> str:
+        return self.purchase_order.currency
+
+    @property
+    def supplier_name(self) -> str:
+        return self.purchase_order.supplier.name
+
+    @property
+    def requester_email(self) -> str:
+        return self.requester.email
 
 
 class AuditLogEntry(Base):
@@ -230,3 +319,23 @@ class AuditLogEntry(Base):
     rationale: Mapped[str] = mapped_column(Text)
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class RiskThresholdOverride(Base):
+    """Self-service calibration for the risk model itself (research.md's own
+    stated fix for trigger-reason concentration: "recalibrate the model, not
+    keep approving exceptions against it") — a single-row table so
+    procurement_lead can adjust the compliance floor without an engineer
+    editing app/config.py and redeploying. risk_engine.py stays a pure
+    function module (constitution Principle I): this table is read at the
+    call site into a Settings copy, never inside risk_engine.py itself."""
+
+    __tablename__ = "risk_threshold_overrides"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    esg_compliance_floor: Mapped[float | None] = mapped_column(nullable=True)
+    esg_elevated_margin: Mapped[float | None] = mapped_column(nullable=True)
+    updated_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
