@@ -23,7 +23,7 @@ lands in an audit trail that can't be edited after the fact.
 supplier's live risk score, which is computed in 3 layers risk (country, performance, compliance); a compliance floor failure blocks the order regardless of the rest.
 
 **Segregation of duties**
-  - Nobody can approve their own exception request. Department approvers
+  - Riskier orders need more sign-offs from different roles. Nobody in any position can approve their own exception request. Department approvers
 only see orders from their own team.
 
 **An audit trail you can trust**
