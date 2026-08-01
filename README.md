@@ -8,8 +8,8 @@ the time anyone realizes the supplier is risky, the order has already
 gone through. 
 
 ProcureGate checks supplier risk the moment a PO is
-submitted, not after the fact. The same order can go through or get
-blocked depending on how risky that supplier looks right now.
+submitted, not after the fact. The same order can go through, get
+blocked, or submit exception depending on how risky that supplier looks right now.
 Self-approval is blocked at the database level, and every decision
 lands in an audit trail that can't be edited after the fact.
 
