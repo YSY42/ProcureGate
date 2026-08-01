@@ -45,7 +45,7 @@ auth · pytest · Docker · GitHub Actions (dual SQLite/Postgres CI)
 ## Roadmap
 
 - [x] Backend: risk engine, RBAC, exceptions, audit trail
-- [x] SwiftUI macOS client — role-based dashboards, PO queue and
+- [x] SwiftUI macOS client: role-based dashboards, PO queue and
       approval workflow, exception requests, filterable audit trail
 - [ ] Cross-platform / web front end
 
