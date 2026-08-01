@@ -17,9 +17,9 @@ lands in an audit trail that can't be edited after the fact.
 
 ## Key features
 
-- **Dynamic, risk-based approval routing** — the same PO takes a
-  different approval path depending on the submitting supplier's live
-  risk score, not a static value threshold.
+- **Dynamic, risk-based approval routing**:
+    the same PO takes a different approval path depending on the submitting supplier's live
+    risk score, not a static value threshold.
 - **Segregation of duties** — self-approval on exception requests is
   blocked at the backend regardless of role; department approvers are
   scoped to their own team.
