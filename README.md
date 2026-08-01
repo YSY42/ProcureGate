@@ -20,7 +20,7 @@ lands in an audit trail that can't be edited after the fact.
 **Dynamic, risk-based approval routing**
 
   - The same PO can take a different approval path depending on the
-supplier's live risk score. Not a fixed dollar threshold.
+supplier's live risk score, which is computed in 3 layers risk (country, performance, compliance); a compliance floor failure blocks the order regardless of the rest.
 
 **Segregation of duties**
   - Nobody can approve their own exception request. Department approvers
@@ -28,7 +28,7 @@ only see orders from their own team.
 
 **An audit trail you can trust**
   - Once a decision is logged, it can't be edited. Every risk trigger and
-approval carries the actual data behind it, not just a note.
+approval carries the actual data behind it.
 
 **A native macOS client**
   - Built in SwiftUI: role-based dashboards, a searchable purchase-order
