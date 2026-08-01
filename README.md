@@ -17,20 +17,21 @@ lands in an audit trail that can't be edited after the fact.
 
 ## Key features
 
-- **Dynamic, risk-based approval routing**:
-    the same PO takes a different approval path depending on the submitting supplier's live
-    risk score, not a static value threshold.
-- **Segregation of duties** — self-approval on exception requests is
-  blocked at the backend regardless of role; department approvers are
-  scoped to their own team.
-- **Audit-trail integrity** — the audit log is insert-only at the
-  database level (Postgres trigger); risk triggers and approval
-  decisions carry structured metadata, not just a free-text note.
-- **A native macOS client** — built in SwiftUI, with role-specific
-  dashboards (a personal risk picture for requesters and approvers, a
-  governance dashboard for procurement leads and auditors), a
-  searchable purchase-order queue, and a filterable audit trail with
-  drill-down to the underlying entity.
+**Dynamic, risk-based approval routing.**
+The same PO can take a different approval path depending on the
+supplier's live risk score. Not a fixed dollar threshold.
+
+**Segregation of duties, enforced.**
+Nobody can approve their own exception request. Department approvers
+only see orders from their own team.
+
+**An audit trail you can trust.**
+Once a decision is logged, it can't be edited. Every risk trigger and
+approval carries the actual data behind it, not just a note.
+
+**A native macOS client.**
+Built in SwiftUI: role-based dashboards, a searchable purchase-order
+queue, and a filterable audit trail you can drill into.
 
 ---
 
