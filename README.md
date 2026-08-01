@@ -22,7 +22,7 @@ lands in an audit trail that can't be edited after the fact.
   - The same PO can take a different approval path depending on the
 supplier's live risk score. Not a fixed dollar threshold.
 
-**Segregation of duties, enforced**
+**Segregation of duties**
   - Nobody can approve their own exception request. Department approvers
 only see orders from their own team.
 
