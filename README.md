@@ -18,6 +18,7 @@ lands in an audit trail that can't be edited after the fact.
 ## Key features
 
 **Dynamic, risk-based approval routing.**
+
 The same PO can take a different approval path depending on the
 supplier's live risk score. Not a fixed dollar threshold.
 
