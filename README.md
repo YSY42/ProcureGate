@@ -17,20 +17,20 @@ lands in an audit trail that can't be edited after the fact.
 
 ## Key features
 
-**Dynamic, risk-based approval routing.**
+**Dynamic, risk-based approval routing**
 
   - The same PO can take a different approval path depending on the
 supplier's live risk score. Not a fixed dollar threshold.
 
-**Segregation of duties, enforced.**
+**Segregation of duties, enforced**
   - Nobody can approve their own exception request. Department approvers
 only see orders from their own team.
 
-**An audit trail you can trust.**
+**An audit trail you can trust**
   - Once a decision is logged, it can't be edited. Every risk trigger and
 approval carries the actual data behind it, not just a note.
 
-**A native macOS client.**
+**A native macOS client**
   - Built in SwiftUI: role-based dashboards, a searchable purchase-order
 queue, and a filterable audit trail you can drill into.
 
